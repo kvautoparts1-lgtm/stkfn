@@ -1,0 +1,16 @@
+{
+  "name": "stonkfun-scanner",
+  "version": "1.0.0",
+  "description": "Scans StonkFun tokens for high claimable fees and low holder count",
+  "main": "index.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
