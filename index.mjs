@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 
 const API_BASE = 'https://www.stonkfun.xyz/api/public/v1';
 const POLL_INTERVAL_MS = 30000; // Polls every 30 seconds
-const CONCURRENCY_LIMIT = 5;    // Max safe batch size for StonkFun rate limits
+const CONCURRENCY_LIMIT = 5;    // Max safe batch size to respect StonkFun rate limits (300 req/min)
 
 // Filter Criteria
 const MIN_CLAIMABLE_USD = 46;
@@ -22,10 +22,33 @@ async function apiCall(endpoint) {
   }
 }
 
+/**
+ * Fetches all active tokens across all pages instead of stopping at page 1
+ */
 async function fetchAllTokens() {
-  const data = await apiCall('/tokens?sort=newest');
-  if (!data) return [];
-  return Array.isArray(data) ? data : (data.tokens || []);
+  let allTokens = [];
+  let page = 1;
+  const limit = 50;
+
+  while (true) {
+    const data = await apiCall(`/tokens?sort=newest&page=${page}&limit=${limit}`);
+    const tokens = Array.isArray(data) ? data : (data?.tokens || []);
+
+    if (!tokens || tokens.length === 0) {
+      break;
+    }
+
+    allTokens.push(...tokens);
+
+    // If the page returned fewer items than requested, we reached the end
+    if (tokens.length < limit) {
+      break;
+    }
+
+    page++;
+  }
+
+  return allTokens;
 }
 
 async function checkToken(token) {
@@ -58,7 +81,7 @@ async function checkToken(token) {
     ?? 0;
 
   if (volumeUsd < MIN_VOLUME_USD) {
-    return; // Volume is below threshold
+    return; // Volume below threshold
   }
 
   // 4. Fetch Claimable Creator Fees
@@ -87,9 +110,9 @@ async function checkToken(token) {
 async function runScan() {
   console.log(`\n[${new Date().toISOString()}] Starting scan cycle...`);
   const tokens = await fetchAllTokens();
-  console.log(`Fetched ${tokens.length} tokens. Applying filters...`);
+  console.log(`Fetched total ${tokens.length} tokens across all pages. Applying filters...`);
 
-  // Process in concurrency chunks to stay within rate limits
+  // Process fee checks in concurrency chunks to stay within rate limits
   for (let i = 0; i < tokens.length; i += CONCURRENCY_LIMIT) {
     const chunk = tokens.slice(i, i + CONCURRENCY_LIMIT);
     await Promise.all(chunk.map(token => checkToken(token)));
